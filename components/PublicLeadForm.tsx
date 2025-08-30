@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Lead, LeadStatus, ContactChannel, Profile, PublicLeadFormProps } from '../types';
 import { cleanPhoneNumber } from '../constants';
+import { PublicAPI } from '../lib/public-api';
 
 const PublicLeadForm: React.FC<PublicLeadFormProps> = ({ setLeads, userProfile, showNotification }) => {
     const [formState, setFormState] = useState({
@@ -25,25 +26,34 @@ const PublicLeadForm: React.FC<PublicLeadFormProps> = ({ setLeads, userProfile, 
 
         const notes = `Jenis Acara: ${formState.eventType}\nTanggal Acara: ${new Date(formState.eventDate).toLocaleDateString('id-ID')}\nLokasi Acara: ${formState.eventLocation}`;
 
-        const newLead: Lead = {
-            id: crypto.randomUUID(),
+        // Submit via Public API
+        PublicAPI.submitLead({
             name: formState.name,
             whatsapp: formState.whatsapp,
-            contactChannel: ContactChannel.WEBSITE,
+            contactChannel: 'Website',
             location: formState.eventLocation,
-            status: LeadStatus.DISCUSSION,
-            date: new Date().toISOString(),
-            notes: notes
-        };
-
-        // Simulate API call
-        setTimeout(() => {
+            notes: notes,
+        }).then((result) => {
+            // Update local state for immediate UI feedback
+            const newLead: Lead = {
+                id: result.id,
+                name: result.name,
+                contactChannel: result.contact_channel as ContactChannel,
+                location: result.location,
+                status: result.status as LeadStatus,
+                date: result.date,
+                notes: result.notes,
+                whatsapp: result.whatsapp,
+            };
             setLeads(prev => [newLead, ...prev]);
             setIsSubmitting(false);
             setIsSubmitted(true);
-            // This notification won't be visible on the public page, but it's good practice
             showNotification('Prospek baru diterima dari formulir web.');
-        }, 1000);
+        }).catch((error) => {
+            console.error('Error submitting lead:', error);
+            alert('Gagal mengirim formulir. Silakan coba lagi.');
+            setIsSubmitting(false);
+        });
     };
 
     if (isSubmitted) {

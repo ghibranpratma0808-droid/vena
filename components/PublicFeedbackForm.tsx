@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ClientFeedback, SatisfactionLevel } from '../types';
 import { StarIcon } from '../constants';
+import { PublicAPI } from '../lib/public-api';
 
 interface PublicFeedbackFormProps {
     setClientFeedback: React.Dispatch<React.SetStateAction<ClientFeedback[]>>;
@@ -39,20 +40,28 @@ const PublicFeedbackForm: React.FC<PublicFeedbackFormProps> = ({ setClientFeedba
         }
         setIsSubmitting(true);
 
-        const newFeedback: ClientFeedback = {
-            id: crypto.randomUUID(),
+        PublicAPI.submitFeedback({
             clientName: formState.clientName,
             rating: formState.rating,
             satisfaction: getSatisfactionFromRating(formState.rating),
             feedback: formState.feedback,
-            date: new Date().toISOString(),
-        };
-
-        setTimeout(() => {
-            setClientFeedback(prev => [newFeedback, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        }).then((result) => {
+            const newFeedback: ClientFeedback = {
+                id: result.id,
+                clientName: result.client_name,
+                rating: result.rating,
+                satisfaction: result.satisfaction,
+                feedback: result.feedback,
+                date: result.date,
+            };
+            setClientFeedback(prev => [newFeedback, ...prev]);
             setIsSubmitting(false);
             setIsSubmitted(true);
-        }, 1000);
+        }).catch((error) => {
+            console.error('Error submitting feedback:', error);
+            alert('Gagal mengirim masukan. Silakan coba lagi.');
+            setIsSubmitting(false);
+        });
     };
 
     if (isSubmitted) {
