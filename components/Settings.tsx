@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Profile, Transaction, Project, User, ViewType, ProjectStatusConfig, SubStatusConfig, PublicPageConfig, Package } from '../types';
 import PageHeader from './PageHeader';
 import Modal from './Modal';
+import DataImportButton from './DataImportButton';
 import { PencilIcon, PlusIcon, Trash2Icon, KeyIcon, UsersIcon, ListIcon, FolderKanbanIcon, Share2Icon, FileTextIcon } from '../constants';
 import { NAV_ITEMS } from '../constants';
 
@@ -66,6 +67,8 @@ const CategoryManager: React.FC<{
                     />
                     <label htmlFor={`input-${title.replace(/\s/g, '')}`} className="input-label">{placeholder}</label>
                 </div>
+                
+                <DataImportButton />
                 <button onClick={onAddOrUpdate} className="button-primary h-fit mt-2">{editingValue ? 'Update' : 'Tambah'}</button>
                 {editingValue && <button onClick={onCancelEdit} className="button-secondary h-fit mt-2">Batal</button>}
             </div>

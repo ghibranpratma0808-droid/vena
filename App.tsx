@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ViewType, Client, Project, TeamMember, Transaction, Package, AddOn, TeamProjectPayment, Profile, FinancialPocket, TeamPaymentRecord, Lead, RewardLedgerEntry, User, Card, Asset, ClientFeedback, Contract, RevisionStatus, NavigationAction, Notification, SocialMediaPost, PromoCode, SOP, CardType, PocketType, VendorData } from './types';
 import { MOCK_USERS, DEFAULT_USER_PROFILE, MOCK_DATA, HomeIcon, FolderKanbanIcon, UsersIcon, DollarSignIcon, PlusIcon, lightenColor, darkenColor, hexToHsl } from './constants';
+import { SupabaseProvider } from './components/SupabaseProvider';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import { Leads } from './components/Leads';
@@ -31,7 +32,23 @@ import PromoCodes from './components/PromoCodes';
 import SOPManagement from './components/SOP';
 import Homepage from './components/Homepage';
 
-const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+const AppContent: React.FC = () => {
+  // Move all the existing App component logic here
+  return (
+    // All existing App JSX content
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <SupabaseProvider>
+      <AppContent />
+    </SupabaseProvider>
+  );
+};
+
+const AppContent: React.FC = () => {
+  const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
     const [state, setState] = useState<T>(() => {
         try {
             const storedValue = window.localStorage.getItem(key);
@@ -57,7 +74,7 @@ const usePersistentState = <T,>(key: string, defaultValue: T): [T, React.Dispatc
     return [state, setState];
 };
 
-const AccessDenied: React.FC<{onBackToDashboard: () => void}> = ({ onBackToDashboard }) => (
+  const AccessDenied: React.FC<{onBackToDashboard: () => void}> = ({ onBackToDashboard }) => (
     <div className="
         flex flex-col items-center justify-center 
         h-full 
@@ -101,7 +118,7 @@ const AccessDenied: React.FC<{onBackToDashboard: () => void}> = ({ onBackToDashb
     </div>
 );
 
-const BottomNavBar: React.FC<{ activeView: ViewType; handleNavigation: (view: ViewType) => void }> = ({ activeView, handleNavigation }) => {
+  const BottomNavBar: React.FC<{ activeView: ViewType; handleNavigation: (view: ViewType) => void }> = ({ activeView, handleNavigation }) => {
     const navItems = [
         { view: ViewType.DASHBOARD, label: 'Beranda', icon: HomeIcon },
         { view: ViewType.PROJECTS, label: 'Proyek', icon: FolderKanbanIcon },
@@ -195,7 +212,6 @@ const BottomNavBar: React.FC<{ activeView: ViewType; handleNavigation: (view: Vi
     );
 };
 
-const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = usePersistentState<boolean>('vena-isAuthenticated', false);
   const [currentUser, setCurrentUser] = usePersistentState<User | null>('vena-currentUser', null);
   const [activeView, setActiveView] = useState<ViewType>(ViewType.HOMEPAGE);
