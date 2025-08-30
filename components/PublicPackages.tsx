@@ -3,6 +3,7 @@ import { Package, AddOn, Profile, Client, Project, Transaction, Lead, Notificati
 import Modal from './Modal';
 import { CheckIcon, CameraIcon, WhatsappIcon } from '../constants';
 import { cleanPhoneNumber } from '../constants';
+import { PublicAPI } from '../lib/public-api';
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
@@ -280,91 +281,74 @@ const PublicPackages: React.FC<PublicPackagesProps> = ({ packages, addOns, userP
         if (!bookingModal.pkg) return;
         setIsSubmitting(true);
         
-        const dpAmount = Number(formData.dp) || 0;
-        const destinationCard = cards.find(c => c.id !== 'CARD_CASH') || cards[0];
-        if (dpAmount > 0 && !destinationCard) {
-            alert('Sistem pembayaran tidak dikonfigurasi. Hubungi vendor.');
-            setIsSubmitting(false);
-            return;
-        }
-        
-        let promoCodeAppliedId: string | undefined;
-        if (discountAmount > 0 && formData.promoCode) {
-            const promoCode = promoCodes.find(p => p.code === formData.promoCode.toUpperCase().trim());
-            if (promoCode) promoCodeAppliedId = promoCode.id;
-        }
-
-        let dpProofUrl = '';
-        if (paymentProof) {
-            try {
-                dpProofUrl = await toBase64(paymentProof);
-            } catch (error) {
-                console.error("Error reading file:", error);
-                alert("Gagal memproses file bukti transfer.");
-                setIsSubmitting(false);
-                return;
+        try {
+            const dpAmount = Number(formData.dp) || 0;
+            
+            let dpProofUrl = '';
+            if (paymentProof) {
+                try {
+                    dpProofUrl = await toBase64(paymentProof);
+                } catch (error) {
+                    console.error("Error reading file:", error);
+                    alert("Gagal memproses file bukti transfer.");
+                    return;
+                }
             }
+            
+            const selectedAddOns = addOns.filter(addon => formData.selectedAddOnIds.includes(addon.id));
+            const transportFee = Number(formData.transportCost) || 0;
+
+            // Submit via Public API
+            const result = await PublicAPI.submitBooking({
+                clientData: {
+                    name: formData.clientName,
+                    email: formData.email,
+                    phone: formData.phone,
+                    instagram: formData.instagram,
+                },
+                projectData: {
+                    projectName: `Acara ${formData.clientName} (${bookingModal.pkg.name})`,
+                    projectType: bookingModal.pkg.name.includes('Pernikahan') ? 'Pernikahan' : 'Lainnya',
+                    date: formData.date,
+                    location: formData.location || 'Akan dikonfirmasi',
+                    packageId: bookingModal.pkg.id,
+                    packageName: bookingModal.pkg.name,
+                    addOns: selectedAddOns,
+                    totalCost: totalProject,
+                    amountPaid: dpAmount,
+                    notes: `Booking dari halaman paket. Ref: ${formData.dpPaymentRef}`,
+                    dpProofUrl,
+                    transportCost: transportFee > 0 ? transportFee : undefined,
+                    promoCodeId: discountAmount > 0 && formData.promoCode ? 
+                        promoCodes.find(p => p.code === formData.promoCode.toUpperCase().trim())?.id : undefined,
+                    discountAmount: discountAmount > 0 ? discountAmount : undefined,
+                }
+            });
+
+            // Update local state for immediate UI feedback
+            if (discountAmount > 0 && formData.promoCode) {
+                const promoCode = promoCodes.find(p => p.code === formData.promoCode.toUpperCase().trim());
+                if (promoCode) {
+                    setPromoCodes(prev => prev.map(p => 
+                        p.id === promoCode.id ? { ...p, usageCount: p.usageCount + 1 } : p
+                    ));
+                }
+            }
+
+            setIsSubmitted(true);
+            
+            addNotification({
+                title: 'Booking Baru Diterima!',
+                message: `Booking dari ${result.client.name} untuk paket "${bookingModal.pkg.name}" menunggu konfirmasi.`,
+                icon: 'lead',
+                link: { view: ViewType.BOOKING }
+            });
+        } catch (error) {
+            console.error('Error submitting booking:', error);
+            alert('Gagal mengirim booking. Silakan coba lagi.');
+        } finally {
+            setIsSubmitting(false);
         }
-        
-        const selectedAddOns = addOns.filter(addon => formData.selectedAddOnIds.includes(addon.id));
-        const remainingPayment = totalProject - dpAmount;
-        const transportFee = Number(formData.transportCost) || 0;
-
-        const newClientId = `CLI${Date.now()}`;
-        const newClient: Client = {
-            id: newClientId, name: formData.clientName, email: formData.email, phone: formData.phone, instagram: formData.instagram,
-            since: new Date().toISOString().split('T')[0], status: ClientStatus.ACTIVE, clientType: ClientType.DIRECT,
-            lastContact: new Date().toISOString(), portalAccessId: crypto.randomUUID(),
-        };
-
-        const newProject: Project = {
-            id: `PRJ${Date.now()}`,
-            projectName: `Acara ${formData.clientName} (${bookingModal.pkg.name})`,
-            clientName: newClient.name, clientId: newClient.id, projectType: bookingModal.pkg.name.includes('Pernikahan') ? 'Pernikahan' : 'Lainnya',
-            packageName: bookingModal.pkg.name, packageId: bookingModal.pkg.id, addOns: selectedAddOns,
-            date: formData.date,
-            location: formData.location || 'Akan dikonfirmasi',
-            progress: 0, status: 'Dikonfirmasi',
-            bookingStatus: BookingStatus.BARU, totalCost: totalProject, amountPaid: dpAmount,
-            paymentStatus: dpAmount >= totalProject ? PaymentStatus.LUNAS : (dpAmount > 0 ? PaymentStatus.DP_TERBAYAR : PaymentStatus.BELUM_BAYAR),
-            team: [], notes: `Booking dari halaman paket. Ref: ${formData.dpPaymentRef}`, dpProofUrl: dpProofUrl || undefined,
-            promoCodeId: promoCodeAppliedId, discountAmount: discountAmount > 0 ? discountAmount : undefined,
-            transportCost: transportFee > 0 ? transportFee : undefined,
-        };
-        
-        const newLead: Lead = {
-            id: `LEAD-PKG-${Date.now()}`, name: newClient.name, contactChannel: ContactChannel.WEBSITE,
-            location: 'Akan dikonfirmasi', status: LeadStatus.CONVERTED, date: new Date().toISOString(),
-            notes: `Dikonversi dari halaman paket. Proyek: ${newProject.projectName}. Klien ID: ${newClient.id}`
-        };
-
-        setClients(prev => [newClient, ...prev]);
-        setProjects(prev => [newProject, ...prev]);
-        setLeads(prev => [newLead, ...prev]);
-        
-        if (promoCodeAppliedId) {
-            setPromoCodes(prev => prev.map(p => p.id === promoCodeAppliedId ? { ...p, usageCount: p.usageCount + 1 } : p));
-        }
-
-        if (dpAmount > 0) {
-            const newTransaction: Transaction = {
-                id: `TRN-DP-${newProject.id}`, date: new Date().toISOString().split('T')[0], description: `DP Proyek ${newProject.projectName}`,
-                amount: dpAmount, type: TransactionType.INCOME, projectId: newProject.id, category: 'DP Proyek',
-                method: 'Transfer Bank', cardId: destinationCard.id,
-            };
-            setTransactions(prev => [...prev, newTransaction].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setCards(prev => prev.map(c => c.id === destinationCard.id ? { ...c, balance: c.balance + dpAmount } : c));
-        }
-
-        addNotification({
-            title: 'Booking Baru Diterima!',
-            message: `Booking dari ${newClient.name} untuk paket "${bookingModal.pkg.name}" menunggu konfirmasi.`,
-            icon: 'lead',
-            link: { view: ViewType.BOOKING }
-        });
-
-        setIsSubmitting(false);
-        setIsSubmitted(true);
     };
 
     const suggestedDp = totalProject * 0.3;
